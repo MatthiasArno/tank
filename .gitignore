@@ -1,0 +1,22 @@
+# Any hidden file or folder
+.*
+!.gitignore
+!.gitkeep
+
+# Compilation
+__pycache__
+*.mpy
+
+# Binary generated
+*.db
+*.png
+
+# Packaging generated
+build
+build-fpm
+debian
+*.deb
+
+# Intermediate output
+output
+

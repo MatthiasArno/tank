@@ -1,0 +1,38 @@
+# Datenbank
+db/*.db
+db/*.db-journal
+db/*.db-wal
+db/*.db-shm
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual Environment
+.venv/
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+*.out
+
+# Environment
+.env
+
+# Test files
+test_plot.html

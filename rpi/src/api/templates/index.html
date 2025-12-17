@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tank Monitoring Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 50px;
+            max-width: 600px;
+            width: 100%;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 2.5em;
+            text-align: center;
+        }
+        .subtitle {
+            color: #666;
+            text-align: center;
+            margin-bottom: 40px;
+            font-size: 1.1em;
+        }
+        .menu {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .menu-item {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        .menu-item:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+        }
+        .menu-item h2 {
+            font-size: 1.5em;
+            margin-bottom: 10px;
+        }
+        .menu-item p {
+            opacity: 0.9;
+            font-size: 0.95em;
+        }
+        .status {
+            text-align: center;
+            margin-top: 30px;
+            padding: 15px;
+            background: #f0f0f0;
+            border-radius: 10px;
+            font-size: 0.9em;
+            color: #666;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            background: #4CAF50;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔥 Tank Monitoring</h1>
+        <p class="subtitle">Heating Dashboard</p>
+
+        <div class="menu">
+            <a href="/30days" class="menu-item">
+                <h2>📊 30-Days-View</h2>
+                <p>Min/Max Temperatures and daily levels</p>
+            </a>
+
+            <a href="/7days" class="menu-item">
+                <h2>📈 7-Days-View</h2>
+                <p>Hourly measurements</p>
+            </a>
+        </div>
+
+        <div class="status">
+            <span class="status-indicator"></span>
+            System aktiv
+        </div>
+    </div>
+</body>
+</html>
