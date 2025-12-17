@@ -6,7 +6,7 @@
     <td width="50%"><img src="doc/images/telegram.jpg" width="40%"></td>
   </tr>
 </table>
-<img src="doc/images/dashboard-30days.png" width="70%"></td>
+<img src="doc/images/dashboard-30days.jpg" width="70%"></td>
  
 # Overwiew
 
