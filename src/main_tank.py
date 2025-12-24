@@ -8,10 +8,12 @@ import time
 import network
 import ntptime
 import machine
+import socket
 import gc
 import os
 import sys
-from machine import Pin, WDT
+
+from machine import Pin, WDT, ADC
 
 # Use ujson for MicroPython (more efficient than standard json)
 try:
@@ -81,15 +83,18 @@ TIMEOUT_REPORT_WAKEUP=60*60
 # T_aus determines the wakeup time
 T_aus=0
 # Temperatures for different wakeup times in 1/10 Celsius
-TEMP_15MIN_WAKEUP=30
-TIMEOUT_15MIN_WAKEUP=15*60
 
+# More aggressive wakeup time if outside temperature falls below 0 or -8 degree Celsius
+TEMP_15MIN_WAKEUP=0
+TIMEOUT_15MIN_WAKEUP=15*60
 TEMP_5MIN_WAKEUP=-80
 TIMEOUT_5MIN_WAKEUP=5*60
 
+# Alarm if: temp<ALARM_TEMP_THRESHOLD_HIGH if AUS < ALARM_TEMP_THRESHOLD_AUS else if temp < ALARM_TEMP_THRESHOLD_LOW
+# 1/10 degrees
 ALARM_TEMP_THRESHOLD_HIGH=250
-ALARM_TEMP_THRESHOLD_AUS=40       
-ALARM_TEMP_THRESHOLD_LOW=170        
+ALARM_TEMP_THRESHOLD_AUS=0
+ALARM_TEMP_THRESHOLD_LOW=160        
 
 LOGFILE="/log.csv"
 # Import stubs here to allow overriding of constants
@@ -123,41 +128,20 @@ def get_memory_usage():
         return f"Error: {e}"
 
 
-# async def measure_vbus_voltage():
-#     """Measure VBUS voltage on ESP32 (async)
+def measure_vbus_voltage():
+    """
+    Measure voltage at GPIO34 with 47k:100k voltage divider.
+    Returns voltage in Volts.
+    """    
+    adc = ADC(machine.Pin(34))
+    adc.atten(ADC.ATTN_11DB)
+    adc.width(ADC.WIDTH_12BIT)    
+    time.sleep_ms(10)
+    adc_value = adc.read()
 
-#     Uses ADC2 channel 8 (GPIO4) which is connected to VBUS
-#     Returns voltage in mV (0-5500 mV typical for USB)
-#     Returns -1 if measurement fails
-#     """
-#     try:
-#         from machine import ADC
+    v_adc = adc_value * ADC_DIG2MVOLT
+    return int(v_adc)
 
-#         # ESP32 VBUS is typically on ADC2_CH8 (GPIO4)
-#         # Voltage divider: VBUS/2 to allow 5V input on 3.3V ADC
-#         # Formula: VBUS_mV = (ADC_reading / 4095) * 3300 * 2
-#         adc = ADC(machine.Pin(4))
-#         adc.atten(ADC.ATTN_11DB)  # 0-3.6V range
-#         adc.width(ADC.WIDTH_12BIT)  # 12-bit resolution (0-4095)
-
-#         # Take multiple readings for stability
-#         readings = []
-#         for _ in range(5):
-#             reading = adc.read()
-#             # Convert ADC reading to VBUS voltage in mV
-#             # With voltage divider (VBUS/2): actual_voltage = (adc_reading / 4095) * 3300 * 2
-#             vbus_mv = (reading * 3300 * 2) // 4095
-#             readings.append(vbus_mv)
-#             await asyncio.sleep_ms(10)
-
-#         # Return median to filter noise
-#         vbus_mv = median(readings)
-#         print(f"  VBUS: {vbus_mv} mV ({vbus_mv/1000:.2f}V)")
-#         return vbus_mv
-
-#     except Exception as e:
-#         print(f"  VBUS measurement error: {e}")
-        return -1
 
 
 def measure_distance_mm():
@@ -299,7 +283,7 @@ class TankMonitor:
         self.last_measurement_time = "01.01.2000 00:00:00"
         self.distance_measurements = [0,0,0]
         self.temperature_readings = []
-        #self.vbus_voltage = 0
+        self.vbus_voltage = 0
         self.key_press_time = 0
         self.key_pressed = False
         self.key_released = False
@@ -314,10 +298,7 @@ class TankMonitor:
         # Onboard LED for web mode indication (GPIO2 on ESP32)
         self.status_led = Pin(2, Pin.OUT)
         self.status_led.off()
-
-        # Enable watchdog timer        
-        #print("✓ Watchdog enabled (15s timeout)")
-
+        
         # ESP32: Configure external wakeup from deep sleep (active LOW)
         if PLATFORM == "ESP32" and wake_on_ext0 is not None:
             try:
@@ -409,10 +390,10 @@ class TankMonitor:
         </head>
         <body>
             <div class="container">
-                <h1>⏱️ Tank Level Monitor V1.7.0</h1>
+                <h1>⏱️ Tank Level Monitor V1.8.0</h1>
 
                 <div class="info-box">
-                    <h3>⏰ Current Time (Berlin)</h3>
+                    <h3>⏰ Current Time (UTC)</h3>
                     <div id="datetime" style="font-size: 16px; font-weight: bold; color: #4CAF50;">Loading...</div>
                 </div>
 
@@ -433,15 +414,14 @@ class TankMonitor:
                     </div>
                 </div>
 
-                <!--
+                
                 <div class="info-box">
                     <h3>⚡ Power Supply</h3>
                     <div style="font-family: monospace; font-size: 14px;">
                         <div><b>VBUS:</b> <span id="vbus-voltage" style="color: #4CAF50; font-weight: bold;">--</span> V</div>
                     </div>
                 </div>
-                -->
-
+                
                 <div class="info-box">
                     <button onclick="publishCurrent()">📤 Publish</button>
                     <button onclick="downloadLog()">📥 Download Log</button>
@@ -485,14 +465,13 @@ class TankMonitor:
                             `<b>WiFi:</b> ${data.wifi_connected ? '✓ Connected' : '✗ Disconnected'}`;
                         document.getElementById('memory').textContent = data.memory;
 
-                        /*
+                        
                         // Update VBUS voltage
                         if (data.vbus_voltage !== undefined && data.vbus_voltage >= 0) {
                             const vbusV = (data.vbus_voltage / 1000).toFixed(2);
                             document.getElementById('vbus-voltage').textContent = vbusV;
                         }
-                        */
-
+                        
                         // Update temperature readings
                         const tempDiv = document.getElementById('temp-readings');
                         if (data.temperatures && data.temperatures.length > 0) {
@@ -615,7 +594,7 @@ class TankMonitor:
                     "wifi_connected": wifi_connected,
                     "norm_dist": self.distance_measurements,
                     "temperatures": temp_data,
-                    #"vbus_voltage": self.vbus_voltage,
+                    "vbus_voltage": self.vbus_voltage,
                     "memory": get_memory_usage()
                 }), headers={"Content-Type": "application/json"})
             except Exception as e:
@@ -628,7 +607,7 @@ class TankMonitor:
                 if self.distance_measurements:
                     await self.publish_distance_measurement(self.distance_measurements)
                     await self.publish_temperature_measurements(self.temperature_readings)
-                    #await self.publish_vbus_voltage(self.vbus_voltage)
+                    await self.publish_vbus_voltage(self.vbus_voltage)
                     await self.log_measurement()
                     return Response(json.dumps({"status": "Published"}))
                 return Response(json.dumps({"status": "No measurement"}))
@@ -720,6 +699,16 @@ class TankMonitor:
             # Shutdown the server after sending response
             self.app.shutdown()
             return response
+        
+    def ping(self, host='8.8.8.8', port=53, timeout=3):
+        try:
+            s = socket.socket()
+            s.settimeout(timeout)
+            s.connect((host, port))
+            s.close()
+            return True
+        except:
+            return False
 
     def connect_wifi(self):
         """Connect to WiFi"""
@@ -733,7 +722,7 @@ class TankMonitor:
             #self.wlan.connect(WIFI_SSID, WIFI_PASSWORD, bssid=WIFI_BSSID) # bssid only works for fritzbox, not repeaters
             self.wlan.connect(WIFI_SSID, WIFI_PASSWORD)
 
-            timeout = 20
+            timeout = 7
             while not self.wlan.isconnected() and timeout > 0:
                 print(".", end="")
                 time.sleep(1)
@@ -789,19 +778,19 @@ class TankMonitor:
             return False
 
         try:
-            print(f"Connecting to MQTT {MQTT_SERVER}:{MQTT_PORT}...")
-            self.mqtt_client = mqtt.MQTTClient(HOSTNAME, MQTT_SERVER, MQTT_PORT)
-            self.mqtt_client.connect()
-            print("✓ MQTT connected")
+            if self.ping(MQTT_SERVER,MQTT_PORT):
+                print(f"Connecting to MQTT {MQTT_SERVER}:{MQTT_PORT}...")
+                self.mqtt_client = mqtt.MQTTClient(HOSTNAME, MQTT_SERVER, MQTT_PORT)
+                self.mqtt_client.connect()
+                print("✓ MQTT connected")
 
-            # Send startup message with timestamp
-            self.update_datetime_string()
-            #topic = "tank/1/status"
-            #message = f"{self.current_datetime_str},hello"
-            #self.mqtt_client.publish(topic, message)
-            #print(f"✓ Status: {message}")
-
-            return True
+                # Send startup message with timestamp
+                self.update_datetime_string()
+                #topic = MQTT_PREFIX+"status"
+                #message = f"{self.current_datetime_str},hello"
+                #self.mqtt_client.publish(topic, message)
+                #print(f"✓ Status: {message}")
+                return True
         except Exception as e:
             print(f"✗ MQTT failed: {e}")
             return False
@@ -836,12 +825,12 @@ class TankMonitor:
             self.temperature_readings = await measure_temperatures()
 
             # Measure VBUS voltage (async, non-blocking)
-            #self.vbus_voltage = await measure_vbus_voltage()
+            self.vbus_voltage = measure_vbus_voltage()
 
             if publish:
                 await self.publish_distance_measurement(self.distance_measurements)
                 await self.publish_temperature_measurements(self.temperature_readings)
-                #await self.publish_vbus_voltage(self.vbus_voltage)
+                await self.publish_vbus_voltage(self.vbus_voltage)
             if log:
                 await self.log_measurement()
             print(f"✓ Measurement: {self.distance_measurements}")
@@ -859,7 +848,7 @@ class TankMonitor:
 
         try:
             self.last_measurement_time = self.current_datetime_str
-            topic = "tank/1/level"
+            topic = MQTT_PREFIX+"level"
             message = f"{self.current_datetime_str},{norm_dist[0]},{norm_dist[1]},{norm_dist[2]},{norm_dist[3]}"
             self.mqtt_client.publish(topic, message)
             print(f"✓ MQTT: {message}")
@@ -880,7 +869,7 @@ class TankMonitor:
         try:
             for sensor_id, temp_int in temp_readings:                
                 # DS18B20 sensors use their ROM address
-                topic = f"tank/1/temp/{sensor_id}"
+                topic = f"{MQTT_PREFIX}temp/{sensor_id}"
                 message = f"{self.current_datetime_str},{temp_int}"
                 self.mqtt_client.publish(topic, message)
                 print(f"✓ MQTT Temp: {message} -> {topic}")
@@ -889,25 +878,25 @@ class TankMonitor:
             print(f"✗ MQTT temp publish failed: {e}")
             return False
 
-    # async def publish_vbus_voltage(self, vbus_mv):
-    #     """Publish VBUS voltage via MQTT
+    async def publish_vbus_voltage(self, vbus_mv):
+        """Publish VBUS voltage via MQTT
 
-    #     Args:
-    #         vbus_mv: VBUS voltage in mV (e.g., 5000 for 5.0V)
-    #     """
-    #     if self.mqtt_client is None or vbus_mv < 0:
-    #         return False
+        Args:
+            vbus_mv: VBUS voltage in mV (e.g., 5000 for 5.0V)
+        """
+        if self.mqtt_client is None or vbus_mv < 0:
+            return False
 
-    #     try:
-    #         topic = "tank/1/vbus"
-    #         vbus_v = vbus_mv / 1000.0
-    #         message = f"{self.current_datetime_str},{vbus_mv}"
-    #         self.mqtt_client.publish(topic, message)
-    #         print(f"✓ MQTT VBUS: {vbus_v:.2f}V -> {topic}")
-    #         return True
-    #     except Exception as e:
-    #         print(f"✗ MQTT VBUS publish failed: {e}")
-    #         return False
+        try:
+            topic = MQTT_PREFIX+"vbus"
+            vbus_v = vbus_mv / 1000.0
+            message = f"{self.current_datetime_str},{vbus_mv}"
+            self.mqtt_client.publish(topic, message)
+            print(f"✓ MQTT VBUS: {vbus_v:.2f}V -> {topic}")
+            return True
+        except Exception as e:
+            print(f"✗ MQTT VBUS publish failed: {e}")
+            return False
 
     async def log_measurement(self):
         """Log to CSV"""
@@ -1039,22 +1028,7 @@ class TankMonitor:
                     await asyncio.sleep(60)
             except Exception as e:
                 print(f"✗ Measurement task error: {e}")
-                await asyncio.sleep(10)
-
-    async def ntp_sync_task(self):
-        """Periodic NTP sync"""
-        last_sync = 0
-        while True:
-            try:
-                current_time = time.time()
-                if current_time - last_sync > 24 * 60 * 60:
-                    if self.connect_wifi():
-                        if self.sync_time():
-                            last_sync = current_time
-                await asyncio.sleep(60)
-            except Exception as e:
-                print(f"NTP task error: {e}")
-                await asyncio.sleep(60)
+                await asyncio.sleep(10)   
 
     async def datetime_update_task(self):
         """Continuously update datetime string (every second)"""
@@ -1200,16 +1174,17 @@ class TankMonitor:
 
         # Initialize
         print("Connecting to WiFi...")
-        if self.connect_wifi():
+        if self.connect_wifi() and self.ping():
             self.sync_time()
             self.init_mqtt()
+        else:            
+            self.deep_sleep()
 
         # Run all tasks
         print("Starting tasks...")
         await asyncio.gather(
             self.key_monitor_task(),
-            self.measurement_task(),
-            #self.ntp_sync_task(),
+            self.measurement_task(),            
             self.datetime_update_task(),
             self.restart_monitor_task(),
             self.web_mode_measurement_task(),

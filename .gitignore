@@ -3,6 +3,9 @@
 !.gitignore
 !.gitkeep
 
+# Environment
+env
+
 # Compilation
 __pycache__
 *.mpy
