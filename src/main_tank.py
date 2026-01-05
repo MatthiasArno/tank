@@ -86,9 +86,9 @@ T_aus=0
 
 # More aggressive wakeup time if outside temperature falls below 0 or -8 degree Celsius
 TEMP_15MIN_WAKEUP=0
-TIMEOUT_15MIN_WAKEUP=15*60
+TIMEOUT_15MIN_WAKEUP=20*60
 TEMP_5MIN_WAKEUP=-80
-TIMEOUT_5MIN_WAKEUP=5*60
+TIMEOUT_5MIN_WAKEUP=10*60
 
 # Alarm if: temp<ALARM_TEMP_THRESHOLD_HIGH if AUS < ALARM_TEMP_THRESHOLD_AUS else if temp < ALARM_TEMP_THRESHOLD_LOW
 # 1/10 degrees
@@ -996,12 +996,12 @@ class TankMonitor:
         return tsleep,is_report                 
 
     def deep_sleep(self):
-        print("deepsleep")
         self.status_led.off()
         activate_temp_module(False)                 
         self.disconnect_wifi()
         tsleep, _=self.get_sleeptime()
         # Calculate sleep time to next full hour
+        print(f"deepsleep: {tsleep}s")
         if PLATFORM_NAME=="RPI_PICO_W":
             # https://github.com/tomjorquera/pico-micropython-lowpower-workaround
             tsleep=60                                
